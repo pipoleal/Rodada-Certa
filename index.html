@@ -950,11 +950,11 @@ document.getElementById('chooseCategoryBtn').addEventListener('click', ()=>showS
            request.resource.data.nome.size() > 0 &&
            request.resource.data.nome.size() <= 20 &&
 
-           request.resource.data.pontuacao is int &&
+           request.resource.data.pontuacao is number &&
            request.resource.data.pontuacao >= 0 &&
            request.resource.data.pontuacao <= 5000 &&
 
-           request.resource.data.acertos is int &&
+           request.resource.data.acertos is number &&
            request.resource.data.acertos >= 0 &&
            request.resource.data.acertos <= 8 &&
 

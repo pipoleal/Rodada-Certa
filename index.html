@@ -495,7 +495,7 @@
     <!-- ===================== TELA 4: RANKING ===================== -->
     <section id="screen-ranking" class="hidden">
       <h2 style="margin-bottom:6px;">Ranking</h2>
-      <p class="subtitle">As 10 melhores pontuações de cada categoria.</p>
+      <p class="subtitle">Os 10 jogadores com mais pontos acumulados em cada categoria.</p>
       <div class="rank-tabs" id="rankTabs" style="margin-top:14px;"></div>
       <div id="rankingList" style="margin-top:14px; display:flex; flex-direction:column; gap:8px;"></div>
       <button class="ghost-btn" id="backFromRanking" style="margin-top:18px;">Voltar</button>
@@ -529,10 +529,19 @@
   Passo a passo completo logo depois do arquivo. Resumo: crie um projeto em
   https://console.firebase.google.com, ative o Firestore, registre um app
   Web e cole as chaves abaixo em FIREBASE_CONFIG.
+
+  IMPORTANTE: para o ranking acumular pontos por jogador (em vez de criar
+  uma linha nova a cada rodada), este jogo usa login anônimo do Firebase
+  Authentication. É preciso ativar isso manualmente no console:
+  Authentication > Sign-in method > Anonymous > Ativar. Sem isso, o login
+  anônimo falha silenciosamente e submitScore() simplesmente não salva
+  (mesmo comportamento seguro de "falha sem quebrar o jogo" do resto do
+  arquivo).
   ===========================================================================
 -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 
 <script>
 // COLE AQUI as chaves do seu app Web do Firebase (Configurações do projeto > Seus apps)
@@ -546,10 +555,12 @@ const FIREBASE_CONFIG = {
 };
 
 let db = null;
+let auth = null;
 try{
   if(FIREBASE_CONFIG.apiKey !== "COLE_AQUI"){
     firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.firestore();
+    auth = firebase.auth();
   }
 }catch(e){
   console.warn('Firebase não configurado ainda:', e);
@@ -903,7 +914,7 @@ function finishRound(){
   document.getElementById('finalScore').textContent = state.score;
   document.getElementById('finalCorrect').textContent = `${state.correctCount}/${state.order.length}`;
   document.getElementById('finalStreak').textContent = state.bestStreak;
-  document.getElementById('playerNameInput').value = '';
+  document.getElementById('playerNameInput').value = getSavedPlayerName();
   document.getElementById('rankSubmit').classList.remove('hidden');
   const savedMsg = document.getElementById('rankSavedMsg');
   savedMsg.classList.add('hidden');
@@ -916,12 +927,25 @@ document.getElementById('chooseCategoryBtn').addEventListener('click', ()=>showS
 
 /* =========================================================================
    RANKING (Firebase Firestore)
-   Cada pontuação salva vira um documento na coleção "pontuacoes", com os
-   campos: categoria, nome, pontuacao, acertos, data. Para listar o top 10
-   de uma categoria, consultamos por categoria + ordenamos por pontuacao
-   desc. Enquanto FIREBASE_CONFIG não estiver preenchido (db === null),
-   tudo aqui falha em silêncio e o ranking simplesmente aparece vazio — o
-   resto do jogo continua funcionando normalmente.
+   O ranking é acumulativo por jogador: cada dispositivo recebe um login
+   anônimo do Firebase Authentication (sem tela de cadastro/senha) e, em
+   vez de criar um documento novo a cada rodada, o jogo grava/atualiza UM
+   único documento por (jogador, categoria) na coleção "pontuacoes", com
+   ID no formato "<uid>_<categoria>" e campos: categoria, nome, pontuacao
+   (soma acumulada via FieldValue.increment), acertos (idem) e data
+   (FieldValue.serverTimestamp da última rodada). Para listar o top 10 de
+   uma categoria, consultamos por categoria + ordenamos por pontuacao
+   desc — a mesma consulta de antes, só que agora cada linha representa o
+   total de um jogador, não uma rodada isolada.
+
+   O nome do jogador também é lembrado em localStorage (getSavedPlayerName/
+   savePlayerName) para não pedir de novo a cada rodada.
+
+   Enquanto FIREBASE_CONFIG não estiver preenchido (db === null) ou o login
+   anônimo não estiver ativado no console (auth === null, ou
+   signInAnonymously falha), tudo aqui falha em silêncio e o ranking
+   simplesmente aparece vazio — o resto do jogo continua funcionando
+   normalmente.
 
    Regras de segurança do Firestore (arquivo firestore.rules na raiz do
    projeto — cole este mesmo conteúdo no console do Firebase em
@@ -932,15 +956,19 @@ document.getElementById('chooseCategoryBtn').addEventListener('click', ()=>showS
      match /databases/{database}/documents {
 
        // Coleção "pontuacoes" do ranking global do quiz.
-       // Cada documento representa uma pontuação enviada ao final de uma rodada.
+       // Um documento por jogador+categoria, ID "<uid>_<categoria>", que
+       // acumula pontos a cada rodada em vez de criar uma linha nova.
        match /pontuacoes/{scoreId} {
 
-         // Leitura pública: qualquer pessoa pode ver o ranking.
+         // Leitura pública: qualquer pessoa pode ver o ranking, mesmo sem login.
          allow read: if true;
 
-         // Criação: qualquer pessoa pode enviar uma pontuação, desde que os
-         // dados batam exatamente com o formato e os limites esperados.
+         // Criação do documento (primeira rodada do jogador nesta categoria):
+         // exige login (mesmo anônimo) e que o ID do documento pertença a
+         // quem está escrevendo, além dos limites normais de formato/faixa.
          allow create: if
+           request.auth != null &&
+           scoreId == request.auth.uid + '_' + request.resource.data.categoria &&
            request.resource.data.keys().hasOnly(['categoria', 'nome', 'pontuacao', 'acertos', 'data']) &&
 
            request.resource.data.categoria is string &&
@@ -963,15 +991,70 @@ document.getElementById('chooseCategoryBtn').addEventListener('click', ()=>showS
            // da escrita, impedindo que o navegador do jogador falsifique a data.
            request.resource.data.data == request.time;
 
-         // Nenhuma pontuação pode ser alterada ou apagada depois de enviada.
-         allow update, delete: if false;
+         // Atualização (rodadas seguintes): só o dono do uid pode somar
+         // pontos ao próprio total, e cada incremento tem o mesmo teto de
+         // uma rodada (5000 pontos / 8 acertos) — o total nunca pode
+         // diminuir nem saltar mais do que uma rodada permite.
+         allow update: if
+           request.auth != null &&
+           scoreId == request.auth.uid + '_' + resource.data.categoria &&
+           request.resource.data.keys().hasOnly(['categoria', 'nome', 'pontuacao', 'acertos', 'data']) &&
+           request.resource.data.categoria == resource.data.categoria &&
+
+           request.resource.data.nome is string &&
+           request.resource.data.nome.size() > 0 &&
+           request.resource.data.nome.size() <= 20 &&
+
+           request.resource.data.pontuacao is number &&
+           request.resource.data.pontuacao >= resource.data.pontuacao &&
+           request.resource.data.pontuacao - resource.data.pontuacao <= 5000 &&
+
+           request.resource.data.acertos is number &&
+           request.resource.data.acertos >= resource.data.acertos &&
+           request.resource.data.acertos - resource.data.acertos <= 8 &&
+
+           request.resource.data.data == request.time;
+
+         // Nenhum documento pode ser apagado.
+         allow delete: if false;
        }
      }
    }
    ========================================================================= */
 const RANKING_SIZE = 10;
+const PLAYER_NAME_KEY = 'rodadaCertaPlayerName';
 let currentRankingCategoryId = CATEGORIES[0].id;
 let rankingReturnScreen = 'home';
+
+function getSavedPlayerName(){
+  try{ return localStorage.getItem(PLAYER_NAME_KEY) || ''; }catch(e){ return ''; }
+}
+
+function savePlayerName(name){
+  try{ localStorage.setItem(PLAYER_NAME_KEY, name); }catch(e){}
+}
+
+// Login anônimo: cada dispositivo/navegador recebe um uid estável do
+// Firebase Auth (sem tela de cadastro), usado para identificar de quem é
+// cada documento acumulado em "pontuacoes". authReady resolve com o uid
+// (ou null se o Firebase/login anônimo não estiver disponível).
+let currentUid = null;
+let resolveAuthReady;
+const authReady = new Promise(resolve=>{ resolveAuthReady = resolve; });
+if(auth){
+  auth.onAuthStateChanged(user=>{
+    if(user){
+      currentUid = user.uid;
+      resolveAuthReady(user.uid);
+    }
+  });
+  auth.signInAnonymously().catch(e=>{
+    console.warn('Falha no login anônimo (ative Authentication > Anonymous no console do Firebase):', e);
+    resolveAuthReady(null);
+  });
+} else {
+  resolveAuthReady(null);
+}
 
 async function loadRanking(categoryId){
   if(!db) return [];
@@ -988,20 +1071,27 @@ async function loadRanking(categoryId){
   }
 }
 
+// Retorna o total acumulado do jogador nesta categoria após salvar, ou
+// null se não foi possível salvar (sem Firebase, sem login, ou erro).
 async function submitScore(name, categoryId){
-  if(!db) return false;
+  if(!db) return null;
   try{
-    await db.collection('pontuacoes').add({
+    const uid = currentUid || await authReady;
+    if(!uid) return null;
+    const docId = `${uid}_${categoryId}`;
+    const ref = db.collection('pontuacoes').doc(docId);
+    await ref.set({
       categoria:categoryId,
       nome:name.slice(0,20),
-      pontuacao:Math.max(0, Math.min(Math.round(state.score), 5000)),
-      acertos:state.correctCount,
+      pontuacao:firebase.firestore.FieldValue.increment(Math.max(0, Math.min(Math.round(state.score), 5000))),
+      acertos:firebase.firestore.FieldValue.increment(state.correctCount),
       data:firebase.firestore.FieldValue.serverTimestamp(),
-    });
-    return true;
+    }, {merge:true});
+    const snap = await ref.get();
+    return snap.exists ? snap.data().pontuacao : null;
   }catch(e){
     console.warn('Falha ao salvar pontuação:', e);
-    return false;
+    return null;
   }
 }
 
@@ -1058,11 +1148,12 @@ document.getElementById('submitScoreBtn').addEventListener('click', async ()=>{
   const btn = document.getElementById('submitScoreBtn');
   btn.disabled = true;
   btn.textContent = 'Salvando…';
-  const ok = await submitScore(name, state.category.id);
+  const total = await submitScore(name, state.category.id);
   const savedMsg = document.getElementById('rankSavedMsg');
-  if(ok){
+  if(total !== null){
+    savePlayerName(name);
     document.getElementById('rankSubmit').classList.add('hidden');
-    savedMsg.textContent = 'Pontuação salva no ranking! 🏆';
+    savedMsg.textContent = `Pontuação salva! Total acumulado nesta categoria: ${total} pts 🏆`;
     savedMsg.classList.remove('hidden');
   } else {
     savedMsg.textContent = 'Não foi possível salvar sua pontuação agora. Verifique sua conexão ou tente de novo em instantes.';

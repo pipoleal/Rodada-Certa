@@ -3,15 +3,19 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // Coleção "pontuacoes" do ranking global do quiz.
-    // Cada documento representa uma pontuação enviada ao final de uma rodada.
+    // Um documento por jogador+categoria, ID "<uid>_<categoria>", que
+    // acumula pontos a cada rodada em vez de criar uma linha nova.
     match /pontuacoes/{scoreId} {
 
-      // Leitura pública: qualquer pessoa pode ver o ranking.
+      // Leitura pública: qualquer pessoa pode ver o ranking, mesmo sem login.
       allow read: if true;
 
-      // Criação: qualquer pessoa pode enviar uma pontuação, desde que os
-      // dados batam exatamente com o formato e os limites esperados.
+      // Criação do documento (primeira rodada do jogador nesta categoria):
+      // exige login (mesmo anônimo) e que o ID do documento pertença a
+      // quem está escrevendo, além dos limites normais de formato/faixa.
       allow create: if
+        request.auth != null &&
+        scoreId == request.auth.uid + '_' + request.resource.data.categoria &&
         request.resource.data.keys().hasOnly(['categoria', 'nome', 'pontuacao', 'acertos', 'data']) &&
 
         request.resource.data.categoria is string &&
@@ -34,8 +38,32 @@ service cloud.firestore {
         // da escrita, impedindo que o navegador do jogador falsifique a data.
         request.resource.data.data == request.time;
 
-      // Nenhuma pontuação pode ser alterada ou apagada depois de enviada.
-      allow update, delete: if false;
+      // Atualização (rodadas seguintes): só o dono do uid pode somar
+      // pontos ao próprio total, e cada incremento tem o mesmo teto de
+      // uma rodada (5000 pontos / 8 acertos) — o total nunca pode
+      // diminuir nem saltar mais do que uma rodada permite.
+      allow update: if
+        request.auth != null &&
+        scoreId == request.auth.uid + '_' + resource.data.categoria &&
+        request.resource.data.keys().hasOnly(['categoria', 'nome', 'pontuacao', 'acertos', 'data']) &&
+        request.resource.data.categoria == resource.data.categoria &&
+
+        request.resource.data.nome is string &&
+        request.resource.data.nome.size() > 0 &&
+        request.resource.data.nome.size() <= 20 &&
+
+        request.resource.data.pontuacao is number &&
+        request.resource.data.pontuacao >= resource.data.pontuacao &&
+        request.resource.data.pontuacao - resource.data.pontuacao <= 5000 &&
+
+        request.resource.data.acertos is number &&
+        request.resource.data.acertos >= resource.data.acertos &&
+        request.resource.data.acertos - resource.data.acertos <= 8 &&
+
+        request.resource.data.data == request.time;
+
+      // Nenhum documento pode ser apagado.
+      allow delete: if false;
     }
   }
 }

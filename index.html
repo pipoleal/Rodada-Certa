@@ -229,9 +229,26 @@
   }
   .answer-btn:hover{ transform:translateX(3px); }
   .answer-btn:disabled{ cursor:default; }
-  .answer-btn.correct{ background:var(--teal); color:#fff; border-color:var(--teal); }
-  .answer-btn.wrong{ background:var(--coral); color:#fff; border-color:var(--coral); }
+  .answer-btn.correct{ background:var(--teal); color:#fff; border-color:var(--teal); animation:answerPulse .35s ease; }
+  .answer-btn.wrong{ background:var(--coral); color:#fff; border-color:var(--coral); animation:answerShake .4s ease; }
   .answer-btn.reveal{ opacity:0.55; }
+
+  @keyframes answerPulse{
+    0%{ transform:scale(1); }
+    40%{ transform:scale(1.04); }
+    100%{ transform:scale(1); }
+  }
+  @keyframes answerShake{
+    10%,90%{ transform:translateX(-1px); }
+    20%,80%{ transform:translateX(2px); }
+    30%,50%,70%{ transform:translateX(-4px); }
+    40%,60%{ transform:translateX(4px); }
+  }
+  @keyframes screenFadeIn{
+    from{ opacity:0; transform:translateY(8px); }
+    to{ opacity:1; transform:translateY(0); }
+  }
+  .screen-enter{ animation:screenFadeIn .35s ease; }
 
   .feedback{
     font-weight:700;
@@ -736,6 +753,54 @@ const QUESTIONS_PER_ROUND = 8;
 const AD_BREAK_EVERY = 5; // intervalo comercial a cada N perguntas
 const TIME_PER_QUESTION = 15;
 
+/* =========================================================================
+   SONS E VIBRAÇÃO (feedback sensorial)
+   Sons gerados na hora via Web Audio API (nenhum arquivo de áudio externo
+   é necessário). O AudioContext só pode iniciar depois de um gesto do
+   usuário (política dos navegadores), por isso getAudioCtx() é chamado
+   sempre a partir de handlers de clique/toque.
+   ========================================================================= */
+let audioCtx = null;
+function getAudioCtx(){
+  if(!audioCtx){
+    try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch(e){ audioCtx = null; }
+  }
+  if(audioCtx && audioCtx.state === 'suspended'){ audioCtx.resume().catch(()=>{}); }
+  return audioCtx;
+}
+
+function playTone(freq, duration, type, delay){
+  const ctx = getAudioCtx();
+  if(!ctx) return;
+  const startAt = ctx.currentTime + (delay||0);
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type || 'sine';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.0001, startAt);
+  gain.gain.exponentialRampToValueAtTime(0.16, startAt+0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startAt+duration);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(startAt);
+  osc.stop(startAt+duration+0.02);
+}
+
+function playCorrectSound(){
+  playTone(660, 0.12, 'triangle');
+  playTone(880, 0.15, 'triangle', 0.09);
+}
+function playWrongSound(){
+  playTone(180, 0.28, 'sawtooth');
+}
+function playWinSound(){
+  [523,659,784,1047].forEach((freq,i)=>playTone(freq, 0.18, 'triangle', i*0.1));
+}
+
+function vibrate(pattern){
+  if(navigator.vibrate){ navigator.vibrate(pattern); }
+}
+
 let state = {
   category:null,
   order:[],
@@ -779,7 +844,7 @@ function renderCategories(){
       <span class="name">${cat.name}</span>
       <span class="count">${cat.questions.length} perguntas</span>
     `;
-    btn.addEventListener('click', ()=>startRound(cat));
+    btn.addEventListener('click', ()=>{ getAudioCtx(); startRound(cat); });
     categoryGrid.appendChild(btn);
   });
 }
@@ -797,11 +862,19 @@ function startRound(category){
   renderQuestion();
 }
 
+const SCREENS_BY_NAME = { home:screenHome, quiz:screenQuiz, result:screenResult, ranking:screenRanking };
+
 function showScreen(name){
-  screenHome.classList.toggle('hidden', name!=='home');
-  screenQuiz.classList.toggle('hidden', name!=='quiz');
-  screenResult.classList.toggle('hidden', name!=='result');
-  screenRanking.classList.toggle('hidden', name!=='ranking');
+  Object.entries(SCREENS_BY_NAME).forEach(([key, el])=>{
+    if(key===name){
+      el.classList.remove('hidden');
+      el.classList.remove('screen-enter');
+      void el.offsetWidth; // força reflow para reiniciar a animação de entrada
+      el.classList.add('screen-enter');
+    } else {
+      el.classList.add('hidden');
+    }
+  });
 }
 
 function updateHeaderScore(){
@@ -874,10 +947,14 @@ function handleAnswer(idx, btnEl){
     state.correctCount++;
     feedbackText.textContent = state.streak>1 ? `Certo! Sequência de ${state.streak} 🔥 (+${bonus})` : `Certo! (+${bonus})`;
     feedbackText.classList.add('correct');
+    playCorrectSound();
+    vibrate(40);
   } else {
     state.streak = 0;
     feedbackText.textContent = idx===-1 ? 'Tempo esgotado!' : 'Resposta errada.';
     feedbackText.classList.add('wrong');
+    playWrongSound();
+    vibrate([60,40,60]);
   }
 
   updateHeaderScore();
@@ -973,6 +1050,7 @@ function finishRound(){
   savedMsg.classList.add('hidden');
   savedMsg.style.color = '';
   showScreen('result');
+  playWinSound();
 }
 
 document.getElementById('playAgainBtn').addEventListener('click', ()=>startRound(state.category));

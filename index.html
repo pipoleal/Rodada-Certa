@@ -754,6 +754,62 @@ const AD_BREAK_EVERY = 5; // intervalo comercial a cada N perguntas
 const TIME_PER_QUESTION = 15;
 
 /* =========================================================================
+   SELEÇÃO DE PERGUNTAS SEM REPETIÇÃO ("sacola embaralhada")
+   Em vez de sortear 8 perguntas do zero a cada rodada (o que podia repetir
+   a mesma pergunta em rodadas seguidas por puro acaso), cada categoria tem
+   uma "sacola" com todos os índices de pergunta embaralhados. Cada rodada
+   consome dessa sacola; ela só é reembaralhada quando esvazia — ou seja,
+   nenhuma pergunta se repete até TODAS as outras da categoria terem
+   aparecido. O estado da sacola fica salvo no localStorage, então a
+   sequência sem repetição continua mesmo se o jogador recarregar a página.
+   ========================================================================= */
+const QUESTION_BAG_KEY = 'rodadaCertaQuestionBags';
+
+function loadQuestionBags(){
+  try{ return JSON.parse(localStorage.getItem(QUESTION_BAG_KEY)) || {}; }
+  catch(e){ return {}; }
+}
+
+function saveQuestionBags(bags){
+  try{ localStorage.setItem(QUESTION_BAG_KEY, JSON.stringify(bags)); }catch(e){}
+}
+
+function shuffledIndices(length){
+  const arr = Array.from({length}, (_,i)=>i);
+  for(let i=arr.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+  return arr;
+}
+
+function pickRoundQuestions(category){
+  const bags = loadQuestionBags();
+  let bag = Array.isArray(bags[category.id]) ? bags[category.id] : [];
+  const total = category.questions.length;
+  const count = Math.min(QUESTIONS_PER_ROUND, total);
+  const chosen = [];
+  const chosenSet = new Set();
+  while(chosen.length < count){
+    if(bag.length === 0){
+      // Reembaralha excluindo o que já saiu NESTA rodada, pra não repetir
+      // pergunta dentro da mesma partida quando a sacola esgota no meio dela.
+      bag = shuffledIndices(total).filter(i=>!chosenSet.has(i));
+      if(bag.length === 0){
+        // Só acontece se a categoria tiver menos perguntas que QUESTIONS_PER_ROUND.
+        bag = shuffledIndices(total);
+      }
+    }
+    const next = bag.shift();
+    chosen.push(next);
+    chosenSet.add(next);
+  }
+  bags[category.id] = bag;
+  saveQuestionBags(bags);
+  return chosen.map(i=>category.questions[i]);
+}
+
+/* =========================================================================
    SONS E VIBRAÇÃO (feedback sensorial)
    Sons gerados na hora via Web Audio API (nenhum arquivo de áudio externo
    é necessário). O AudioContext só pode iniciar depois de um gesto do
@@ -851,7 +907,7 @@ function renderCategories(){
 
 function startRound(category){
   state.category = category;
-  state.order = [...category.questions].sort(()=>Math.random()-0.5).slice(0,QUESTIONS_PER_ROUND);
+  state.order = pickRoundQuestions(category);
   state.currentIndex = 0;
   state.score = 0;
   state.correctCount = 0;

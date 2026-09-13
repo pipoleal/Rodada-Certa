@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rodada Certa — Quiz</title>
+
+<!--
+  ===========================================================================
+  COMO ATIVAR ANÚNCIOS REAIS (Google AdSense)
+  ===========================================================================
+  1. Publique este arquivo em um domínio seu (não funciona em localhost puro
+     nem dentro de sandboxes/iframes de preview — o AdSense exige um site
+     público aprovado pela sua conta Google AdSense).
+  2. Crie uma conta em https://adsense.google.com e cadastre seu site.
+  3. Depois de aprovado, cole o script de verificação da sua conta aqui no
+     <head>, substituindo ca-pub-XXXXXXXXXXXXXXXX pelo seu client ID:
+
+     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
+
+  4. Em cada elemento com a classe "ad-slot" neste arquivo, existe um
+     comentário indicando exatamente onde colar o <ins class="adsbygoogle">
+     correspondente a cada bloco de anúncio criado no painel do AdSense.
+  ===========================================================================
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --ink:#14123B;
+    --paper:#EFF1F7;
+    --paper-card:#FFFFFF;
+    --primary:#372F8C;
+    --coral:#FF5A5F;
+    --teal:#0FA98C;
+    --gold:#F5A623;
+    --magenta:#D6409F;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+
+  h1,h2,h3,.display{
+    font-family:'Space Grotesk',sans-serif;
+    margin:0;
+  }
+
+  .app{
+    width:100%;
+    max-width:640px;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    background:var(--paper);
+  }
+
+  /* ---------- HEADER ---------- */
+  header{
+    background:var(--primary);
+    color:#fff;
+    padding:22px 20px 26px;
+    border-bottom:6px solid var(--ink);
+  }
+  header .top-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+  header h1{
+    font-size:1.5rem;
+    letter-spacing:-0.02em;
+  }
+  header h1 span{color:var(--gold);}
+  .score-pill{
+    background:var(--ink);
+    color:#fff;
+    padding:8px 14px;
+    border-radius:999px;
+    font-weight:700;
+    font-size:0.9rem;
+    white-space:nowrap;
+  }
+
+  /* ---------- AD SLOTS (placeholders) ---------- */
+  .ad-slot{
+    background:repeating-linear-gradient(45deg,#DCE0EE,#DCE0EE 10px,#E7E9F4 10px,#E7E9F4 20px);
+    border:2px dashed #9AA2C0;
+    color:#5A5F80;
+    font-size:0.8rem;
+    font-weight:600;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    padding:10px;
+  }
+  .ad-banner-top{ height:60px; margin:14px 20px 0; border-radius:10px; }
+  .ad-rect{ height:200px; margin:20px; border-radius:10px; }
+  /* <ins class="adsbygoogle" ...></ins> do AdSense entra dentro de .ad-slot */
+
+  /* ---------- MAIN AREA ---------- */
+  main{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    padding:20px;
+    gap:20px;
+  }
+
+  .subtitle{
+    color:#4A4F72;
+    font-size:0.95rem;
+    line-height:1.5;
+    max-width:46ch;
+  }
+
+  /* ---------- CATEGORY GRID ---------- */
+  .category-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+  }
+  .category-tile{
+    border:none;
+    border-radius:22px;
+    padding:22px 16px;
+    text-align:left;
+    cursor:pointer;
+    color:#fff;
+    font-family:'Space Grotesk',sans-serif;
+    box-shadow:6px 6px 0 var(--ink);
+    transition:transform .12s ease, box-shadow .12s ease;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .category-tile:hover{ transform:translate(-2px,-2px); box-shadow:8px 8px 0 var(--ink); }
+  .category-tile:active{ transform:translate(2px,2px); box-shadow:2px 2px 0 var(--ink); }
+  .category-tile .icon{ font-size:1.8rem; }
+  .category-tile .name{ font-size:1.05rem; font-weight:700; }
+  .category-tile .count{ font-size:0.8rem; opacity:.85; font-family:'Inter',sans-serif; }
+
+  .tile-indigo{ background:var(--primary); }
+  .tile-teal{ background:var(--teal); }
+  .tile-coral{ background:var(--coral); }
+  .tile-gold{ background:var(--gold); color:var(--ink); }
+  .tile-magenta{ background:var(--magenta); }
+
+  /* ---------- QUIZ SCREEN ---------- */
+  .progress-row{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    font-size:0.85rem;
+    font-weight:700;
+    color:var(--primary);
+  }
+  .progress-track{
+    flex:1;
+    height:10px;
+    background:#DCE0EE;
+    border-radius:999px;
+    overflow:hidden;
+  }
+  .progress-fill{
+    height:100%;
+    background:var(--gold);
+    border-radius:999px;
+    transition:width .3s ease;
+  }
+  .timer-badge{
+    background:var(--ink);
+    color:#fff;
+    border-radius:8px;
+    padding:4px 10px;
+    font-size:0.85rem;
+  }
+  .timer-badge.warn{ background:var(--coral); }
+
+  .question-card{
+    background:var(--paper-card);
+    border-radius:20px;
+    padding:26px 22px;
+    box-shadow:6px 6px 0 var(--primary);
+  }
+  .question-card .category-tag{
+    font-size:0.78rem;
+    font-weight:700;
+    color:var(--teal);
+    margin-bottom:10px;
+    display:block;
+  }
+  .question-card h2{
+    font-size:1.3rem;
+    line-height:1.35;
+  }
+
+  .answers{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .answer-btn{
+    text-align:left;
+    padding:16px 18px;
+    border-radius:12px;
+    border:2px solid var(--ink);
+    background:#fff;
+    font-family:'Inter',sans-serif;
+    font-size:1rem;
+    font-weight:600;
+    color:var(--ink);
+    cursor:pointer;
+    transition:background .15s ease, transform .1s ease;
+  }
+  .answer-btn:hover{ transform:translateX(3px); }
+  .answer-btn:disabled{ cursor:default; }
+  .answer-btn.correct{ background:var(--teal); color:#fff; border-color:var(--teal); }
+  .answer-btn.wrong{ background:var(--coral); color:#fff; border-color:var(--coral); }
+  .answer-btn.reveal{ opacity:0.55; }
+
+  .feedback{
+    font-weight:700;
+    font-family:'Space Grotesk',sans-serif;
+    text-align:center;
+    min-height:1.4em;
+  }
+  .feedback.correct{ color:var(--teal); }
+  .feedback.wrong{ color:var(--coral); }
+
+  .primary-btn{
+    background:var(--ink);
+    color:#fff;
+    border:none;
+    border-radius:12px;
+    padding:15px;
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    font-size:1rem;
+    cursor:pointer;
+    box-shadow:4px 4px 0 var(--gold);
+  }
+  .primary-btn:active{ transform:translate(2px,2px); box-shadow:2px 2px 0 var(--gold); }
+  .primary-btn:disabled{ opacity:0.5; cursor:default; box-shadow:none; }
+
+  .ghost-btn{
+    background:transparent;
+    border:2px solid var(--ink);
+    color:var(--ink);
+    border-radius:12px;
+    padding:13px;
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    font-size:0.95rem;
+    cursor:pointer;
+  }
+
+  /* ---------- INTERSTITIAL AD OVERLAY ---------- */
+  .overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(20,18,59,0.92);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:50;
+    padding:20px;
+  }
+  .interstitial-card{
+    background:#fff;
+    border-radius:18px;
+    width:100%;
+    max-width:400px;
+    padding:22px;
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+  .interstitial-card .label{
+    font-size:0.75rem;
+    font-weight:700;
+    color:#8891B5;
+  }
+  .interstitial-ad-box{ height:280px; border-radius:12px; }
+  .skip-row{
+    display:flex;
+    justify-content:flex-end;
+    align-items:center;
+    gap:10px;
+    font-size:0.85rem;
+    color:#5A5F80;
+  }
+
+  /* ---------- RESULTS ---------- */
+  .result-hero{
+    background:var(--primary);
+    color:#fff;
+    border-radius:20px;
+    padding:30px 22px;
+    text-align:center;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .result-hero .big-number{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:3rem;
+    font-weight:700;
+  }
+  .result-hero .caption{ opacity:.85; font-size:0.9rem; }
+
+  .stat-row{
+    display:flex;
+    gap:12px;
+  }
+  .stat-box{
+    flex:1;
+    background:#fff;
+    border-radius:14px;
+    padding:14px;
+    text-align:center;
+    box-shadow:4px 4px 0 var(--ink);
+  }
+  .stat-box .stat-value{ font-family:'Space Grotesk',sans-serif; font-size:1.4rem; font-weight:700; }
+  .stat-box .stat-label{ font-size:0.75rem; color:#5A5F80; }
+
+  .hidden{ display:none !important; }
+
+  /* ---------- RANKING ---------- */
+  .rank-submit{
+    margin-top:4px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .rank-label{ font-size:0.85rem; font-weight:600; color:#4A4F72; }
+  .rank-input-row{ display:flex; gap:10px; }
+  .rank-input-row input{
+    flex:1;
+    border:2px solid var(--ink);
+    border-radius:10px;
+    padding:12px 14px;
+    font-family:'Inter',sans-serif;
+    font-size:0.95rem;
+  }
+  #rankSavedMsg{
+    font-weight:700;
+    color:var(--teal);
+    font-family:'Space Grotesk',sans-serif;
+    text-align:center;
+  }
+  .rank-tabs{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .rank-tab{
+    border:2px solid var(--ink);
+    background:#fff;
+    color:var(--ink);
+    border-radius:999px;
+    padding:8px 14px;
+    font-size:0.85rem;
+    font-weight:700;
+    font-family:'Space Grotesk',sans-serif;
+    cursor:pointer;
+  }
+  .rank-tab.active{ background:var(--ink); color:#fff; }
+  .rank-row{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    background:#fff;
+    border-radius:12px;
+    padding:12px 16px;
+    box-shadow:3px 3px 0 var(--ink);
+  }
+  .rank-row .rank-pos{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    color:var(--gold);
+    width:22px;
+  }
+  .rank-row .rank-name{ flex:1; font-weight:600; }
+  .rank-row .rank-score{ font-family:'Space Grotesk',sans-serif; font-weight:700; color:var(--primary); }
+  .rank-empty{ color:#8891B5; font-size:0.9rem; text-align:center; padding:20px 0; }
+
+  footer{
+    text-align:center;
+    font-size:0.75rem;
+    color:#8891B5;
+    padding:16px;
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <header>
+    <div class="top-row">
+      <h1>Rodada <span>Certa</span></h1>
+      <div class="score-pill" id="headerScore">0 pts</div>
+    </div>
+  </header>
+
+  <!-- AD SLOT 1: banner fixo no topo, alta visibilidade em toda a sessão -->
+  <div class="ad-slot ad-banner-top">
+    Espaço de anúncio — banner topo (728×90 / responsivo)
+    <!-- Cole aqui o <ins class="adsbygoogle"> do seu bloco de anúncio "display" -->
+  </div>
+
+  <main>
+
+    <!-- ===================== TELA 1: SELEÇÃO DE CATEGORIA ===================== -->
+    <section id="screen-home">
+      <h2 style="margin-bottom:6px;">Escolha uma categoria</h2>
+      <p class="subtitle">8 perguntas por rodada. Acerte em sequência para multiplicar seus pontos.</p>
+      <button class="ghost-btn" id="homeRankingBtn" style="margin-top:4px;">🏆 Ver ranking</button>
+      <div class="category-grid" id="categoryGrid" style="margin-top:16px;"></div>
+    </section>
+
+    <!-- ===================== TELA 2: QUIZ ===================== -->
+    <section id="screen-quiz" class="hidden">
+      <div class="progress-row">
+        <span id="questionCounter">1/8</span>
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        <span class="timer-badge" id="timerBadge">15s</span>
+      </div>
+
+      <div class="question-card" style="margin-top:16px;">
+        <span class="category-tag" id="quizCategoryTag">CATEGORIA</span>
+        <h2 id="questionText">Pergunta aqui</h2>
+      </div>
+
+      <button class="ghost-btn hidden" id="hintBtn" style="margin-top:14px; width:100%;">💡 Assistir anúncio para eliminar uma alternativa</button>
+
+      <div class="answers" id="answersContainer" style="margin-top:16px;"></div>
+
+      <p class="feedback" id="feedbackText"></p>
+
+      <button class="primary-btn hidden" id="nextBtn" style="margin-top:6px;">Próxima pergunta</button>
+    </section>
+
+    <!-- ===================== TELA 3: RESULTADO ===================== -->
+    <section id="screen-result" class="hidden">
+      <div class="result-hero">
+        <span class="caption">Você terminou a rodada!</span>
+        <span class="big-number" id="finalScore">0</span>
+        <span class="caption">pontos</span>
+      </div>
+
+      <div class="stat-row" style="margin-top:16px;">
+        <div class="stat-box">
+          <div class="stat-value" id="finalCorrect">0/8</div>
+          <div class="stat-label">acertos</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="finalStreak">0</div>
+          <div class="stat-label">melhor sequência</div>
+        </div>
+      </div>
+
+      <!-- AD SLOT 3: retângulo médio, momento de maior atenção (pós-jogo) -->
+      <div class="ad-slot ad-rect">
+        Espaço de anúncio — retângulo médio (300×250)
+        <!-- Cole aqui o <ins class="adsbygoogle"> do bloco de anúncio de resultado -->
+      </div>
+
+      <div class="rank-submit" id="rankSubmit">
+        <label class="rank-label" for="playerNameInput">Salvar pontuação no ranking desta categoria</label>
+        <div class="rank-input-row">
+          <input type="text" id="playerNameInput" maxlength="20" placeholder="Seu nome ou apelido">
+          <button class="primary-btn" id="submitScoreBtn" style="box-shadow:none;">Salvar</button>
+        </div>
+      </div>
+      <p class="hidden" id="rankSavedMsg">Pontuação salva no ranking! 🏆</p>
+
+      <button class="primary-btn" id="playAgainBtn">Jogar de novo</button>
+      <button class="ghost-btn" id="viewRankingBtn" style="margin-top:10px;">Ver ranking</button>
+      <button class="ghost-btn" id="chooseCategoryBtn" style="margin-top:10px;">Escolher outra categoria</button>
+    </section>
+
+    <!-- ===================== TELA 4: RANKING ===================== -->
+    <section id="screen-ranking" class="hidden">
+      <h2 style="margin-bottom:6px;">Ranking</h2>
+      <p class="subtitle">As 10 melhores pontuações de cada categoria.</p>
+      <div class="rank-tabs" id="rankTabs" style="margin-top:14px;"></div>
+      <div id="rankingList" style="margin-top:14px; display:flex; flex-direction:column; gap:8px;"></div>
+      <button class="ghost-btn" id="backFromRanking" style="margin-top:18px;">Voltar</button>
+    </section>
+
+  </main>
+
+  <footer>Rodada Certa — jogo de quiz</footer>
+</div>
+
+<!-- ===================== OVERLAY: INTERVALO COMERCIAL (a cada 5 perguntas) ===================== -->
+<div class="overlay hidden" id="adOverlay">
+  <div class="interstitial-card">
+    <span class="label" id="adOverlayLabel">INTERVALO</span>
+    <!-- AD SLOT 2 e 4: intersticial (entre blocos) e recompensado (dica) usam o mesmo espaço -->
+    <div class="ad-slot interstitial-ad-box" id="adOverlayBox">
+      Espaço de anúncio
+      <!-- Cole aqui o <ins class="adsbygoogle"> do bloco correspondente (intersticial ou recompensado) -->
+    </div>
+    <div class="skip-row">
+      <span id="skipCountdownText">Continuar em 3s</span>
+      <button class="ghost-btn hidden" id="skipAdBtn" style="padding:8px 16px;">Continuar</button>
+    </div>
+  </div>
+</div>
+
+<!--
+  ===========================================================================
+  RANKING GLOBAL — FIREBASE (Firestore)
+  ===========================================================================
+  Passo a passo completo logo depois do arquivo. Resumo: crie um projeto em
+  https://console.firebase.google.com, ative o Firestore, registre um app
+  Web e cole as chaves abaixo em FIREBASE_CONFIG.
+  ===========================================================================
+-->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<script>
+// COLE AQUI as chaves do seu app Web do Firebase (Configurações do projeto > Seus apps)
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAh_UThzWb_yNn-BL9XcYyAwnjdAqW6txQ",
+  authDomain: "quiz-rodada-certa.firebaseapp.com",
+  projectId: "quiz-rodada-certa",
+  storageBucket: "quiz-rodada-certa.firebasestorage.app",
+  messagingSenderId: "252212994268",
+  appId: "1:252212994268:web:4c40b10bcb0dfe7a2a9419",
+};
+
+let db = null;
+try{
+  if(FIREBASE_CONFIG.apiKey !== "COLE_AQUI"){
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.firestore();
+  }
+}catch(e){
+  console.warn('Firebase não configurado ainda:', e);
+}
+</script>
+
+<script>
+/* =========================================================================
+   BANCO DE PERGUNTAS
+   ========================================================================= */
+const CATEGORIES = [
+  {
+    id:'geral', name:'Conhecimento Geral', icon:'🧠', tile:'tile-indigo',
+    questions:[
+      {q:'Qual é o maior órgão do corpo humano?', options:['Fígado','Pele','Coração','Pulmão'], correct:1},
+      {q:'Quantos lados tem um hexágono?', options:['5','6','7','8'], correct:1},
+      {q:'Quem pintou a Mona Lisa?', options:['Michelangelo','Rafael','Leonardo da Vinci','Donatello'], correct:2},
+      {q:'Qual é o metal líquido à temperatura ambiente?', options:['Chumbo','Mercúrio','Estanho','Ferro'], correct:1},
+      {q:'Em que ano começou a Segunda Guerra Mundial?', options:['1935','1939','1941','1945'], correct:1},
+      {q:'Qual é a moeda oficial do Japão?', options:['Won','Yuan','Iene','Rúpia'], correct:2},
+      {q:'Quantos ossos tem o corpo humano adulto?', options:['186','206','226','246'], correct:1},
+      {q:'Qual desses é um dos cinco sentidos?', options:['Equilíbrio','Memória','Olfato','Intuição'], correct:2},
+      {q:'Qual é a capital do Brasil?', options:['Rio de Janeiro','São Paulo','Brasília','Salvador'], correct:2},
+      {q:'Quantos minutos tem uma hora?', options:['50','60','70','100'], correct:1},
+      {q:'Qual é o maior oceano do mundo?', options:['Atlântico','Índico','Pacífico','Ártico'], correct:2},
+      {q:'Em que idioma foi escrito originalmente "Dom Quixote"?', options:['Português','Italiano','Espanhol','Francês'], correct:2},
+      {q:'Qual é o gás mais abundante na atmosfera terrestre?', options:['Oxigênio','Nitrogênio','Gás carbônico','Hidrogênio'], correct:1},
+      {q:'Quantas cordas vocais o ser humano tem?', options:['1','2','3','4'], correct:1},
+      {q:'Qual é a capital da França?', options:['Lyon','Marselha','Paris','Nice'], correct:2},
+      {q:'Quem foi o primeiro presidente dos Estados Unidos?', options:['Thomas Jefferson','George Washington','Abraham Lincoln','John Adams'], correct:1},
+    ]
+  },
+  {
+    id:'geografia', name:'Geografia', icon:'🌍', tile:'tile-teal',
+    questions:[
+      {q:'Qual é o maior país do mundo em área?', options:['Canadá','China','Rússia','Brasil'], correct:2},
+      {q:'Qual rio é o mais extenso do mundo?', options:['Nilo','Amazonas','Yangtzé','Mississippi'], correct:1},
+      {q:'Qual é a capital da Austrália?', options:['Sydney','Melbourne','Camberra','Perth'], correct:2},
+      {q:'Em qual continente fica o Egito?', options:['Ásia','África','Oriente Médio','Europa'], correct:1},
+      {q:'Qual é o deserto mais extenso do planeta?', options:['Saara','Atacama','Gobi','Antártico'], correct:3},
+      {q:'Qual país tem o formato de uma bota?', options:['Grécia','Itália','Portugal','Croácia'], correct:1},
+      {q:'Qual é o menor país do mundo?', options:['Mônaco','San Marino','Vaticano','Liechtenstein'], correct:2},
+      {q:'Machu Picchu fica em qual país?', options:['Bolívia','Chile','Peru','Equador'], correct:2},
+      {q:'Qual é o país mais populoso do mundo atualmente?', options:['China','Índia','Indonésia','Estados Unidos'], correct:1},
+      {q:'Qual é a montanha mais alta do mundo?', options:['K2','Everest','Kilimanjaro','Aconcágua'], correct:1},
+      {q:'Em qual continente fica o Deserto do Saara?', options:['Ásia','África','Oceania','América do Sul'], correct:1},
+      {q:'Qual é a capital do Canadá?', options:['Toronto','Vancouver','Ottawa','Montreal'], correct:2},
+      {q:'Qual estreito separa a Europa da África?', options:['Bering','Gibraltar','Bósforo','Messina'], correct:1},
+      {q:'Qual é o maior arquipélago do mundo?', options:['Filipinas','Japão','Indonésia','Maldivas'], correct:2},
+      {q:'Qual rio corta o Egito?', options:['Congo','Nilo','Níger','Zambeze'], correct:1},
+      {q:'Qual país é conhecido como "terra do sol nascente"?', options:['China','Coreia do Sul','Japão','Tailândia'], correct:2},
+    ]
+  },
+  {
+    id:'ciencia', name:'Ciência', icon:'🔬', tile:'tile-coral',
+    questions:[
+      {q:'Qual é o símbolo químico do ouro?', options:['Go','Au','Ag','Ou'], correct:1},
+      {q:'Quantos planetas existem no Sistema Solar?', options:['7','8','9','10'], correct:1},
+      {q:'Qual é a velocidade da luz aproximadamente?', options:['300 mil km/s','150 mil km/s','30 mil km/s','3 milhões km/s'], correct:0},
+      {q:'Quem propôs a teoria da relatividade?', options:['Isaac Newton','Nikola Tesla','Albert Einstein','Galileu Galilei'], correct:2},
+      {q:'Qual gás as plantas absorvem na fotossíntese?', options:['Oxigênio','Nitrogênio','Gás carbônico','Hidrogênio'], correct:2},
+      {q:'Qual é a unidade básica da vida?', options:['Átomo','Célula','Molécula','Tecido'], correct:1},
+      {q:'Quantos ossos tem a coluna vertebral humana?', options:['26','33','40','52'], correct:1},
+      {q:'Qual planeta é conhecido como "planeta vermelho"?', options:['Vênus','Júpiter','Marte','Saturno'], correct:2},
+      {q:'Qual é o osso mais longo do corpo humano?', options:['Úmero','Fêmur','Tíbia','Rádio'], correct:1},
+      {q:'Qual cientista é considerado o pai da genética moderna?', options:['Charles Darwin','Gregor Mendel','Louis Pasteur','Isaac Newton'], correct:1},
+      {q:'Quantos pares de cromossomos tem o ser humano?', options:['21','22','23','24'], correct:2},
+      {q:'Qual é a fórmula química da água?', options:['CO2','H2O','O2','NaCl'], correct:1},
+      {q:'O que a sigla "DNA" representa?', options:['Ácido nucleico duplo','Ácido desoxirribonucleico','Divisão nuclear ativa','Dupla nucleína ativa'], correct:1},
+      {q:'Qual é o maior planeta do Sistema Solar?', options:['Saturno','Júpiter','Netuno','Urano'], correct:1},
+      {q:'Que tipo de animal é o golfinho?', options:['Peixe','Réptil','Mamífero','Anfíbio'], correct:2},
+      {q:'Qual elemento químico tem o símbolo "O"?', options:['Ouro','Oxigênio','Ósmio','Ozônio'], correct:1},
+    ]
+  },
+  {
+    id:'entretenimento', name:'Entretenimento', icon:'🎬', tile:'tile-gold',
+    questions:[
+      {q:'Qual instrumento tem 88 teclas?', options:['Violão','Piano','Harpa','Acordeão'], correct:1},
+      {q:'Em qual cidade fica a Broadway?', options:['Los Angeles','Chicago','Nova York','Boston'], correct:2},
+      {q:'Qual é o prêmio mais importante do cinema?', options:['Grammy','Emmy','Oscar','Globo de Ouro'], correct:2},
+      {q:'Quantas cordas tem um violão clássico?', options:['4','5','6','7'], correct:2},
+      {q:'Qual desses é um gênero musical brasileiro?', options:['Flamenco','Samba','Reggaeton','Fado'], correct:1},
+      {q:'Quem dirigiu a trilogia original "O Poderoso Chefão"?', options:['Steven Spielberg','Martin Scorsese','Francis Ford Coppola','George Lucas'], correct:2},
+      {q:'Qual desses é um festival de música famoso?', options:['Comic-Con','Coachella','Sundance','TED'], correct:1},
+      {q:'Em que tipo de obra usamos o termo "ato"?', options:['Filme','Romance','Peça de teatro','Podcast'], correct:2},
+      {q:'Qual desses é um instrumento de sopro?', options:['Violino','Flauta','Bateria','Contrabaixo'], correct:1},
+      {q:'Em qual país nasceu o tango?', options:['Espanha','Argentina','México','Cuba'], correct:1},
+      {q:'Quantas notas musicais existem na escala ocidental básica?', options:['5','6','7','8'], correct:2},
+      {q:'Qual desses é considerado um clássico da animação?', options:['Titanic','Branca de Neve','Matrix','Rocky'], correct:1},
+      {q:'Qual é o nome do prêmio de teatro mais famoso da Broadway?', options:['Grammy','Tony Award','Emmy','BAFTA'], correct:1},
+      {q:'Qual desses é considerado um instrumento de cordas?', options:['Violão','Flauta','Tambor','Trompete'], correct:0},
+      {q:'Em que tipo de evento normalmente se usa tapete vermelho?', options:['Reunião escolar','Premiação de cinema','Feira de ciências','Competição esportiva'], correct:1},
+      {q:'Quantos músicos costumam formar um quarteto?', options:['2','3','4','5'], correct:2},
+    ]
+  },
+  {
+    id:'esportes', name:'Esportes', icon:'⚽', tile:'tile-magenta',
+    questions:[
+      {q:'De quantos em quantos anos ocorrem as Olimpíadas de verão?', options:['2','3','4','5'], correct:2},
+      {q:'Quantos jogadores tem um time de futebol em campo?', options:['9','10','11','12'], correct:2},
+      {q:'Em qual esporte se usa o termo "ace"?', options:['Vôlei','Tênis','Golfe','Boxe'], correct:1},
+      {q:'Qual país sediou a Copa do Mundo de 2014?', options:['África do Sul','Brasil','Rússia','Catar'], correct:1},
+      {q:'Quantos pontos vale uma cesta de três no basquete?', options:['2','3','4','1'], correct:1},
+      {q:'Qual é a distância de uma maratona?', options:['21 km','32 km','42 km','50 km'], correct:2},
+      {q:'Em qual esporte se disputa a Copa Davis?', options:['Golfe','Tênis','Natação','Vela'], correct:1},
+      {q:'Qual movimento marca o início de uma luta de judô?', options:['Kumite','Cumprimento (rei)','Saque','Apito'], correct:1},
+      {q:'Em qual esporte se usa o termo "nocaute"?', options:['Luta livre','Boxe','Karatê','Judô'], correct:1},
+      {q:'Qual é a duração normal de uma partida de futebol, sem prorrogação?', options:['60 minutos','90 minutos','120 minutos','45 minutos'], correct:1},
+      {q:'Em qual país foi criado o futebol moderno?', options:['Brasil','Inglaterra','Espanha','Alemanha'], correct:1},
+      {q:'Quantos jogadores tem um time de vôlei em quadra?', options:['5','6','7','8'], correct:1},
+      {q:'Qual nado é considerado o mais rápido na natação?', options:['Costas','Peito','Borboleta','Crawl (nado livre)'], correct:3},
+      {q:'Em qual esporte se disputa a Stanley Cup?', options:['Basquete','Hóquei no gelo','Rugby','Beisebol'], correct:1},
+      {q:'Como se chama o troféu entregue ao campeão da Copa do Mundo de futebol?', options:['Copa Libertadores','Troféu FIFA World Cup','Bola de Ouro','Champions Cup'], correct:1},
+      {q:'Em qual esporte olímpico os atletas usam florete, espada ou sabre?', options:['Tiro com arco','Esgrima','Judô','Taekwondo'], correct:1},
+    ]
+  },
+];
+
+const QUESTIONS_PER_ROUND = 8;
+const AD_BREAK_EVERY = 5; // intervalo comercial a cada N perguntas
+const TIME_PER_QUESTION = 15;
+
+let state = {
+  category:null,
+  order:[],
+  currentIndex:0,
+  score:0,
+  correctCount:0,
+  streak:0,
+  bestStreak:0,
+  timer:null,
+  timeLeft:TIME_PER_QUESTION,
+};
+
+const screenHome = document.getElementById('screen-home');
+const screenQuiz = document.getElementById('screen-quiz');
+const screenResult = document.getElementById('screen-result');
+const screenRanking = document.getElementById('screen-ranking');
+const categoryGrid = document.getElementById('categoryGrid');
+const headerScore = document.getElementById('headerScore');
+const questionCounter = document.getElementById('questionCounter');
+const progressFill = document.getElementById('progressFill');
+const timerBadge = document.getElementById('timerBadge');
+const quizCategoryTag = document.getElementById('quizCategoryTag');
+const questionText = document.getElementById('questionText');
+const answersContainer = document.getElementById('answersContainer');
+const feedbackText = document.getElementById('feedbackText');
+const nextBtn = document.getElementById('nextBtn');
+const adOverlay = document.getElementById('adOverlay');
+const adOverlayLabel = document.getElementById('adOverlayLabel');
+const adOverlayBox = document.getElementById('adOverlayBox');
+const skipCountdownText = document.getElementById('skipCountdownText');
+const skipAdBtn = document.getElementById('skipAdBtn');
+const hintBtn = document.getElementById('hintBtn');
+
+function renderCategories(){
+  categoryGrid.innerHTML = '';
+  CATEGORIES.forEach(cat=>{
+    const btn = document.createElement('button');
+    btn.className = `category-tile ${cat.tile}`;
+    btn.innerHTML = `
+      <span class="icon">${cat.icon}</span>
+      <span class="name">${cat.name}</span>
+      <span class="count">${cat.questions.length} perguntas</span>
+    `;
+    btn.addEventListener('click', ()=>startRound(cat));
+    categoryGrid.appendChild(btn);
+  });
+}
+
+function startRound(category){
+  state.category = category;
+  state.order = [...category.questions].sort(()=>Math.random()-0.5).slice(0,QUESTIONS_PER_ROUND);
+  state.currentIndex = 0;
+  state.score = 0;
+  state.correctCount = 0;
+  state.streak = 0;
+  state.bestStreak = 0;
+  updateHeaderScore();
+  showScreen('quiz');
+  renderQuestion();
+}
+
+function showScreen(name){
+  screenHome.classList.toggle('hidden', name!=='home');
+  screenQuiz.classList.toggle('hidden', name!=='quiz');
+  screenResult.classList.toggle('hidden', name!=='result');
+  screenRanking.classList.toggle('hidden', name!=='ranking');
+}
+
+function updateHeaderScore(){
+  headerScore.textContent = `${state.score} pts`;
+}
+
+function renderQuestion(){
+  clearInterval(state.timer);
+  const q = state.order[state.currentIndex];
+  state.hintUsed = false;
+  quizCategoryTag.textContent = state.category.name.toUpperCase();
+  questionText.textContent = q.q;
+  questionCounter.textContent = `${state.currentIndex+1}/${state.order.length}`;
+  progressFill.style.width = `${(state.currentIndex/state.order.length)*100}%`;
+  feedbackText.textContent = '';
+  feedbackText.className = 'feedback';
+  nextBtn.classList.add('hidden');
+
+  hintBtn.classList.remove('hidden');
+  hintBtn.disabled = false;
+  hintBtn.textContent = '💡 Assistir anúncio para eliminar uma alternativa';
+
+  answersContainer.innerHTML = '';
+  q.options.forEach((opt, idx)=>{
+    const b = document.createElement('button');
+    b.className = 'answer-btn';
+    b.textContent = opt;
+    b.addEventListener('click', ()=>handleAnswer(idx, b));
+    answersContainer.appendChild(b);
+  });
+
+  state.timeLeft = TIME_PER_QUESTION;
+  startTimer();
+}
+
+function startTimer(){
+  clearInterval(state.timer);
+  timerBadge.textContent = `${state.timeLeft}s`;
+  timerBadge.classList.toggle('warn', state.timeLeft<=5);
+  state.timer = setInterval(()=>{
+    state.timeLeft--;
+    timerBadge.textContent = `${state.timeLeft}s`;
+    if(state.timeLeft<=5) timerBadge.classList.add('warn');
+    if(state.timeLeft<=0){
+      clearInterval(state.timer);
+      handleAnswer(-1, null); // tempo esgotado
+    }
+  },1000);
+}
+
+function handleAnswer(idx, btnEl){
+  clearInterval(state.timer);
+  const q = state.order[state.currentIndex];
+  const buttons = answersContainer.querySelectorAll('.answer-btn');
+  buttons.forEach(b=>b.disabled = true);
+
+  const isCorrect = idx === q.correct;
+
+  buttons[q.correct].classList.add('correct');
+  if(!isCorrect && idx>=0){
+    buttons[idx].classList.add('wrong');
+  }
+  buttons.forEach((b,i)=>{ if(i!==q.correct && i!==idx) b.classList.add('reveal'); });
+
+  if(isCorrect){
+    state.streak++;
+    state.bestStreak = Math.max(state.bestStreak, state.streak);
+    const bonus = 100 + Math.min(state.streak-1,5)*20;
+    state.score += bonus;
+    state.correctCount++;
+    feedbackText.textContent = state.streak>1 ? `Certo! Sequência de ${state.streak} 🔥 (+${bonus})` : `Certo! (+${bonus})`;
+    feedbackText.classList.add('correct');
+  } else {
+    state.streak = 0;
+    feedbackText.textContent = idx===-1 ? 'Tempo esgotado!' : 'Resposta errada.';
+    feedbackText.classList.add('wrong');
+  }
+
+  updateHeaderScore();
+  nextBtn.classList.remove('hidden');
+  hintBtn.classList.add('hidden');
+}
+
+hintBtn.addEventListener('click', ()=>{
+  clearInterval(state.timer); // pausa o cronômetro enquanto o anúncio roda
+  hintBtn.disabled = true;
+  showAd({
+    label:'ANÚNCIO RECOMPENSADO',
+    duration:5,
+    buttonText:'Resgatar dica',
+    onDone: applyHint,
+  });
+});
+
+function applyHint(){
+  state.hintUsed = true;
+  hintBtn.classList.add('hidden');
+  const q = state.order[state.currentIndex];
+  const buttons = answersContainer.querySelectorAll('.answer-btn');
+  const wrongIndices = q.options.map((_,i)=>i).filter(i=>i!==q.correct);
+  const toEliminate = wrongIndices[Math.floor(Math.random()*wrongIndices.length)];
+  buttons[toEliminate].disabled = true;
+  buttons[toEliminate].classList.add('reveal');
+  buttons[toEliminate].textContent = buttons[toEliminate].textContent + '  ✕';
+  startTimer(); // retoma o cronômetro de onde parou
+}
+
+nextBtn.addEventListener('click', ()=>{
+  state.currentIndex++;
+  const answeredCount = state.currentIndex;
+
+  if(state.currentIndex >= state.order.length){
+    finishRound();
+    return;
+  }
+
+  if(answeredCount % AD_BREAK_EVERY === 0){
+    showAd({
+      label:'INTERVALO',
+      duration:3,
+      buttonText:'Continuar',
+      onDone: renderQuestion,
+    });
+  } else {
+    renderQuestion();
+  }
+});
+
+// Overlay genérico de anúncio — usado tanto no intervalo entre perguntas
+// quanto no anúncio recompensado (dica). "duration" é o tempo mínimo
+// obrigatório de exibição antes do botão de continuar aparecer.
+function showAd({label, duration, buttonText, onDone}){
+  adOverlay.classList.remove('hidden');
+  adOverlayLabel.textContent = label;
+  // Não mexemos no conteúdo de adOverlayBox aqui de propósito: quando você
+  // colar o <ins class="adsbygoogle"> real dentro dele, essa linha
+  // sobrescreveria o anúncio verdadeiro toda vez que o overlay abrisse.
+  skipAdBtn.textContent = buttonText;
+  skipAdBtn.classList.add('hidden');
+  let countdown = duration;
+  skipCountdownText.textContent = `${buttonText} em ${countdown}s`;
+  skipCountdownText.classList.remove('hidden');
+
+  const iv = setInterval(()=>{
+    countdown--;
+    if(countdown<=0){
+      clearInterval(iv);
+      skipCountdownText.classList.add('hidden');
+      skipAdBtn.classList.remove('hidden');
+    } else {
+      skipCountdownText.textContent = `${buttonText} em ${countdown}s`;
+    }
+  },1000);
+
+  skipAdBtn.onclick = ()=>{
+    adOverlay.classList.add('hidden');
+    onDone();
+  };
+}
+
+function finishRound(){
+  progressFill.style.width = '100%';
+  document.getElementById('finalScore').textContent = state.score;
+  document.getElementById('finalCorrect').textContent = `${state.correctCount}/${state.order.length}`;
+  document.getElementById('finalStreak').textContent = state.bestStreak;
+  document.getElementById('playerNameInput').value = '';
+  document.getElementById('rankSubmit').classList.remove('hidden');
+  const savedMsg = document.getElementById('rankSavedMsg');
+  savedMsg.classList.add('hidden');
+  savedMsg.style.color = '';
+  showScreen('result');
+}
+
+document.getElementById('playAgainBtn').addEventListener('click', ()=>startRound(state.category));
+document.getElementById('chooseCategoryBtn').addEventListener('click', ()=>showScreen('home'));
+
+/* =========================================================================
+   RANKING (Firebase Firestore)
+   Cada pontuação salva vira um documento na coleção "pontuacoes", com os
+   campos: categoria, nome, pontuacao, acertos, data. Para listar o top 10
+   de uma categoria, consultamos por categoria + ordenamos por pontuacao
+   desc. Enquanto FIREBASE_CONFIG não estiver preenchido (db === null),
+   tudo aqui falha em silêncio e o ranking simplesmente aparece vazio — o
+   resto do jogo continua funcionando normalmente.
+
+   Regras de segurança do Firestore (arquivo firestore.rules na raiz do
+   projeto — cole este mesmo conteúdo no console do Firebase em
+   Firestore Database > Regras):
+
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+
+       // Coleção "pontuacoes" do ranking global do quiz.
+       // Cada documento representa uma pontuação enviada ao final de uma rodada.
+       match /pontuacoes/{scoreId} {
+
+         // Leitura pública: qualquer pessoa pode ver o ranking.
+         allow read: if true;
+
+         // Criação: qualquer pessoa pode enviar uma pontuação, desde que os
+         // dados batam exatamente com o formato e os limites esperados.
+         allow create: if
+           request.resource.data.keys().hasOnly(['categoria', 'nome', 'pontuacao', 'acertos', 'data']) &&
+
+           request.resource.data.categoria is string &&
+           request.resource.data.categoria in ['geral', 'geografia', 'ciencia', 'entretenimento', 'esportes'] &&
+
+           request.resource.data.nome is string &&
+           request.resource.data.nome.size() > 0 &&
+           request.resource.data.nome.size() <= 20 &&
+
+           request.resource.data.pontuacao is int &&
+           request.resource.data.pontuacao >= 0 &&
+           request.resource.data.pontuacao <= 5000 &&
+
+           request.resource.data.acertos is int &&
+           request.resource.data.acertos >= 0 &&
+           request.resource.data.acertos <= 8 &&
+
+           // Obriga o uso de FieldValue.serverTimestamp() no cliente: o valor
+           // gravado precisa ser exatamente o horário do servidor no momento
+           // da escrita, impedindo que o navegador do jogador falsifique a data.
+           request.resource.data.data == request.time;
+
+         // Nenhuma pontuação pode ser alterada ou apagada depois de enviada.
+         allow update, delete: if false;
+       }
+     }
+   }
+   ========================================================================= */
+const RANKING_SIZE = 10;
+let currentRankingCategoryId = CATEGORIES[0].id;
+let rankingReturnScreen = 'home';
+
+async function loadRanking(categoryId){
+  if(!db) return [];
+  try{
+    const snap = await db.collection('pontuacoes')
+      .where('categoria','==',categoryId)
+      .orderBy('pontuacao','desc')
+      .limit(RANKING_SIZE)
+      .get();
+    return snap.docs.map(d=>d.data());
+  }catch(e){
+    console.warn('Falha ao carregar ranking:', e);
+    return [];
+  }
+}
+
+async function submitScore(name, categoryId){
+  if(!db) return false;
+  try{
+    await db.collection('pontuacoes').add({
+      categoria:categoryId,
+      nome:name.slice(0,20),
+      pontuacao:Math.max(0, Math.min(Math.round(state.score), 5000)),
+      acertos:state.correctCount,
+      data:firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    return true;
+  }catch(e){
+    console.warn('Falha ao salvar pontuação:', e);
+    return false;
+  }
+}
+
+function renderRankTabs(){
+  const rankTabs = document.getElementById('rankTabs');
+  rankTabs.innerHTML = '';
+  CATEGORIES.forEach(cat=>{
+    const tab = document.createElement('button');
+    tab.className = 'rank-tab' + (cat.id===currentRankingCategoryId ? ' active' : '');
+    tab.textContent = `${cat.icon} ${cat.name}`;
+    tab.addEventListener('click', ()=>{
+      currentRankingCategoryId = cat.id;
+      renderRankTabs();
+      renderRankingList();
+    });
+    rankTabs.appendChild(tab);
+  });
+}
+
+async function renderRankingList(){
+  const rankingList = document.getElementById('rankingList');
+  rankingList.innerHTML = '<p class="rank-empty">Carregando…</p>';
+  const list = await loadRanking(currentRankingCategoryId);
+  if(list.length===0){
+    rankingList.innerHTML = '<p class="rank-empty">Ainda não há pontuações nesta categoria. Seja o primeiro!</p>';
+    return;
+  }
+  rankingList.innerHTML = '';
+  list.forEach((entry, i)=>{
+    const row = document.createElement('div');
+    row.className = 'rank-row';
+    row.innerHTML = `
+      <span class="rank-pos">${i+1}º</span>
+      <span class="rank-name">${escapeHtml(entry.nome)}</span>
+      <span class="rank-score">${entry.pontuacao} pts</span>
+    `;
+    rankingList.appendChild(row);
+  });
+}
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+document.getElementById('submitScoreBtn').addEventListener('click', async ()=>{
+  const input = document.getElementById('playerNameInput');
+  const name = input.value.trim();
+  if(!name){
+    input.focus();
+    return;
+  }
+  const btn = document.getElementById('submitScoreBtn');
+  btn.disabled = true;
+  btn.textContent = 'Salvando…';
+  const ok = await submitScore(name, state.category.id);
+  const savedMsg = document.getElementById('rankSavedMsg');
+  if(ok){
+    document.getElementById('rankSubmit').classList.add('hidden');
+    savedMsg.textContent = 'Pontuação salva no ranking! 🏆';
+    savedMsg.classList.remove('hidden');
+  } else {
+    savedMsg.textContent = 'Não foi possível salvar sua pontuação agora. Verifique sua conexão ou tente de novo em instantes.';
+    savedMsg.style.color = 'var(--coral)';
+    savedMsg.classList.remove('hidden');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Salvar';
+});
+
+document.getElementById('viewRankingBtn').addEventListener('click', ()=>{
+  currentRankingCategoryId = state.category ? state.category.id : CATEGORIES[0].id;
+  rankingReturnScreen = 'result';
+  renderRankTabs();
+  renderRankingList();
+  showScreen('ranking');
+});
+
+document.getElementById('homeRankingBtn').addEventListener('click', ()=>{
+  rankingReturnScreen = 'home';
+  renderRankTabs();
+  renderRankingList();
+  showScreen('ranking');
+});
+
+document.getElementById('backFromRanking').addEventListener('click', ()=>{
+  showScreen(rankingReturnScreen);
+});
+
+renderCategories();
+showScreen('home');
+</script>
+
+</body>
+</html>

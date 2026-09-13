@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Coleção "pontuacoes" do ranking global do quiz.
+    // Cada documento representa uma pontuação enviada ao final de uma rodada.
+    match /pontuacoes/{scoreId} {
+
+      // Leitura pública: qualquer pessoa pode ver o ranking.
+      allow read: if true;
+
+      // Criação: qualquer pessoa pode enviar uma pontuação, desde que os
+      // dados batam exatamente com o formato e os limites esperados.
+      allow create: if
+        request.resource.data.keys().hasOnly(['categoria', 'nome', 'pontuacao', 'acertos', 'data']) &&
+
+        request.resource.data.categoria is string &&
+        request.resource.data.categoria in ['geral', 'geografia', 'ciencia', 'entretenimento', 'esportes'] &&
+
+        request.resource.data.nome is string &&
+        request.resource.data.nome.size() > 0 &&
+        request.resource.data.nome.size() <= 20 &&
+
+        request.resource.data.pontuacao is int &&
+        request.resource.data.pontuacao >= 0 &&
+        request.resource.data.pontuacao <= 5000 &&
+
+        request.resource.data.acertos is int &&
+        request.resource.data.acertos >= 0 &&
+        request.resource.data.acertos <= 8 &&
+
+        // Obriga o uso de FieldValue.serverTimestamp() no cliente: o valor
+        // gravado precisa ser exatamente o horário do servidor no momento
+        // da escrita, impedindo que o navegador do jogador falsifique a data.
+        request.resource.data.data == request.time;
+
+      // Nenhuma pontuação pode ser alterada ou apagada depois de enviada.
+      allow update, delete: if false;
+    }
+  }
+}

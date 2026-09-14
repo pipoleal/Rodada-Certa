@@ -94,6 +94,25 @@
     font-size:0.9rem;
     white-space:nowrap;
   }
+  .header-actions{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .mute-btn{
+    background:rgba(255,255,255,0.15);
+    border:none;
+    color:#fff;
+    width:34px;
+    height:34px;
+    border-radius:50%;
+    font-size:1rem;
+    line-height:1;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
 
   /* ---------- AD SLOTS (placeholders) ---------- */
   .ad-slot{
@@ -415,6 +434,18 @@
   .rank-row .rank-name{ flex:1; font-weight:600; }
   .rank-row .rank-score{ font-family:'Space Grotesk',sans-serif; font-weight:700; color:var(--primary); }
   .rank-empty{ color:#8891B5; font-size:0.9rem; text-align:center; padding:20px 0; }
+  .rank-row-me{ border:2px solid var(--gold); box-shadow:3px 3px 0 var(--gold); }
+  .my-ranking-position{
+    margin-top:14px;
+    background:var(--ink);
+    color:#fff;
+    border-radius:12px;
+    padding:12px 16px;
+    text-align:center;
+    font-weight:700;
+    font-family:'Space Grotesk',sans-serif;
+    font-size:0.9rem;
+  }
 
   footer{
     text-align:center;
@@ -431,7 +462,10 @@
   <header>
     <div class="top-row">
       <h1>Rodada <span>Certa</span></h1>
-      <div class="score-pill" id="headerScore">0 pts</div>
+      <div class="header-actions">
+        <button class="mute-btn" id="muteBtn" aria-label="Silenciar sons">🔊</button>
+        <div class="score-pill" id="headerScore">0 pts</div>
+      </div>
     </div>
   </header>
 
@@ -518,6 +552,7 @@
       <p class="subtitle">Os 10 jogadores com mais pontos acumulados em cada categoria.</p>
       <div class="rank-tabs" id="rankTabs" style="margin-top:14px;"></div>
       <div id="rankingList" style="margin-top:14px; display:flex; flex-direction:column; gap:8px;"></div>
+      <p class="my-ranking-position hidden" id="myRankingPosition"></p>
       <button class="ghost-btn" id="backFromRanking" style="margin-top:18px;">Voltar</button>
     </section>
 
@@ -814,8 +849,22 @@ function pickRoundQuestions(category){
    Sons gerados na hora via Web Audio API (nenhum arquivo de áudio externo
    é necessário). O AudioContext só pode iniciar depois de um gesto do
    usuário (política dos navegadores), por isso getAudioCtx() é chamado
-   sempre a partir de handlers de clique/toque.
+   sempre a partir de handlers de clique/toque. O botão de mudo no cabeçalho
+   controla tanto o som quanto a vibração, e a preferência é lembrada em
+   localStorage.
    ========================================================================= */
+const SOUND_ENABLED_KEY = 'rodadaCertaSoundEnabled';
+function loadSoundEnabled(){
+  try{
+    const v = localStorage.getItem(SOUND_ENABLED_KEY);
+    return v === null ? true : v === '1';
+  }catch(e){ return true; }
+}
+function saveSoundEnabled(enabled){
+  try{ localStorage.setItem(SOUND_ENABLED_KEY, enabled ? '1' : '0'); }catch(e){}
+}
+let soundEnabled = loadSoundEnabled();
+
 let audioCtx = null;
 function getAudioCtx(){
   if(!audioCtx){
@@ -827,6 +876,7 @@ function getAudioCtx(){
 }
 
 function playTone(freq, duration, type, delay){
+  if(!soundEnabled) return;
   const ctx = getAudioCtx();
   if(!ctx) return;
   const startAt = ctx.currentTime + (delay||0);
@@ -854,6 +904,7 @@ function playWinSound(){
 }
 
 function vibrate(pattern){
+  if(!soundEnabled) return;
   if(navigator.vibrate){ navigator.vibrate(pattern); }
 }
 
@@ -1251,10 +1302,39 @@ async function loadRanking(categoryId){
       .orderBy('pontuacao','desc')
       .limit(RANKING_SIZE)
       .get();
-    return snap.docs.map(d=>d.data());
+    return snap.docs.map(d=>({ id:d.id, ...d.data() }));
   }catch(e){
     console.warn('Falha ao carregar ranking:', e);
     return [];
+  }
+}
+
+// Busca a pontuação e a posição do próprio jogador nesta categoria, mesmo
+// quando ele não aparece no Top 10. A posição exata usa uma consulta de
+// contagem (quantos jogadores têm pontuação maior); se essa contagem
+// falhar por qualquer motivo (ex.: SDK sem suporte a count()), ainda assim
+// mostramos a pontuação acumulada sem o número da posição.
+async function loadMyRankingInfo(categoryId, docId){
+  if(!db) return null;
+  try{
+    const snap = await db.collection('pontuacoes').doc(docId).get();
+    if(!snap.exists) return null;
+    const myScore = snap.data().pontuacao;
+    let position = null;
+    try{
+      const aboveSnap = await db.collection('pontuacoes')
+        .where('categoria','==',categoryId)
+        .where('pontuacao','>',myScore)
+        .count()
+        .get();
+      position = aboveSnap.data().count + 1;
+    }catch(e){
+      console.warn('Não foi possível calcular a posição exata no ranking:', e);
+    }
+    return { pontuacao:myScore, position };
+  }catch(e){
+    console.warn('Falha ao carregar sua posição no ranking:', e);
+    return null;
   }
 }
 
@@ -1300,23 +1380,46 @@ function renderRankTabs(){
 
 async function renderRankingList(){
   const rankingList = document.getElementById('rankingList');
+  const myPositionBox = document.getElementById('myRankingPosition');
+  const categoryId = currentRankingCategoryId;
   rankingList.innerHTML = '<p class="rank-empty">Carregando…</p>';
-  const list = await loadRanking(currentRankingCategoryId);
+  myPositionBox.classList.add('hidden');
+
+  const uid = currentUid || await authReady;
+  const myDocId = uid ? `${uid}_${categoryId}` : null;
+
+  const [list, myInfo] = await Promise.all([
+    loadRanking(categoryId),
+    myDocId ? loadMyRankingInfo(categoryId, myDocId) : Promise.resolve(null),
+  ]);
+
+  // Se o jogador trocou de categoria enquanto essas consultas estavam em
+  // andamento, descarta o resultado — ele já não corresponde à aba aberta.
+  if(categoryId !== currentRankingCategoryId) return;
+
   if(list.length===0){
     rankingList.innerHTML = '<p class="rank-empty">Ainda não há pontuações nesta categoria. Seja o primeiro!</p>';
-    return;
+  } else {
+    rankingList.innerHTML = '';
+    list.forEach((entry, i)=>{
+      const row = document.createElement('div');
+      row.className = 'rank-row' + (entry.id===myDocId ? ' rank-row-me' : '');
+      row.innerHTML = `
+        <span class="rank-pos">${i+1}º</span>
+        <span class="rank-name">${escapeHtml(entry.nome)}</span>
+        <span class="rank-score">${entry.pontuacao} pts</span>
+      `;
+      rankingList.appendChild(row);
+    });
   }
-  rankingList.innerHTML = '';
-  list.forEach((entry, i)=>{
-    const row = document.createElement('div');
-    row.className = 'rank-row';
-    row.innerHTML = `
-      <span class="rank-pos">${i+1}º</span>
-      <span class="rank-name">${escapeHtml(entry.nome)}</span>
-      <span class="rank-score">${entry.pontuacao} pts</span>
-    `;
-    rankingList.appendChild(row);
-  });
+
+  const amInTop = myDocId && list.some(entry=>entry.id===myDocId);
+  if(myInfo && !amInTop){
+    myPositionBox.classList.remove('hidden');
+    myPositionBox.textContent = myInfo.position
+      ? `Você está em ${myInfo.position}º lugar nesta categoria — ${myInfo.pontuacao} pts`
+      : `Sua pontuação acumulada nesta categoria: ${myInfo.pontuacao} pts`;
+  }
 }
 
 function escapeHtml(str){
@@ -1369,6 +1472,19 @@ document.getElementById('homeRankingBtn').addEventListener('click', ()=>{
 document.getElementById('backFromRanking').addEventListener('click', ()=>{
   showScreen(rankingReturnScreen);
 });
+
+const muteBtn = document.getElementById('muteBtn');
+function updateMuteBtn(){
+  muteBtn.textContent = soundEnabled ? '🔊' : '🔇';
+  muteBtn.setAttribute('aria-label', soundEnabled ? 'Silenciar sons' : 'Ativar sons');
+}
+muteBtn.addEventListener('click', ()=>{
+  soundEnabled = !soundEnabled;
+  saveSoundEnabled(soundEnabled);
+  updateMuteBtn();
+  if(soundEnabled){ getAudioCtx(); }
+});
+updateMuteBtn();
 
 renderCategories();
 showScreen('home');
